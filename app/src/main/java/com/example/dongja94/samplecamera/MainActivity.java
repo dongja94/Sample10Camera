@@ -4,18 +4,28 @@ import android.Manifest;
 import android.app.AlertDialog;
 import android.content.DialogInterface;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.hardware.Camera;
 import android.os.Bundle;
+import android.os.Handler;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.view.View;
+import android.widget.Button;
+import android.widget.Gallery;
 
 import java.io.IOException;
+import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements SurfaceHolder.Callback {
 
     Camera mCamera;
+    Gallery gallery;
+    ImageAdapter mAdapter;
+
     int cameraId = Camera.CameraInfo.CAMERA_FACING_BACK;
 
     @Override
@@ -25,6 +35,108 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         SurfaceView surfaceView = (SurfaceView)findViewById(R.id.surfaceView);
         surfaceView.getHolder().addCallback(this);
         surfaceView.getHolder().setType(SurfaceHolder.SURFACE_TYPE_PUSH_BUFFERS);
+        gallery = (Gallery)findViewById(R.id.gallery);
+        mAdapter = new ImageAdapter();
+        gallery.setAdapter(mAdapter);
+
+        Button btn = (Button)findViewById(R.id.btn_change);
+        btn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                changeCamera();
+            }
+        });
+
+        btn = (Button)findViewById(R.id.btn_effect);
+        btn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                changeColorEffect();
+            }
+        });
+
+        btn = (Button)findViewById(R.id.btn_picture);
+        btn.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                takePicture();
+            }
+        });
+    }
+
+    Camera.ShutterCallback shutterCallback = new Camera.ShutterCallback() {
+        @Override
+        public void onShutter() {
+
+        }
+    };
+    Camera.PictureCallback rawCallback = new Camera.PictureCallback() {
+        @Override
+        public void onPictureTaken(byte[] data, Camera camera) {
+
+        }
+    };
+    Camera.PictureCallback jpegCallback = new Camera.PictureCallback() {
+        @Override
+        public void onPictureTaken(byte[] data, Camera camera) {
+
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inJustDecodeBounds = true;
+            BitmapFactory.decodeByteArray(data, 0, data.length, options);
+            int width = options.outWidth;
+            int height = options.outHeight;
+            int realWidth = getResources().getDimensionPixelOffset(R.dimen.photo_width);
+            int realHeight = getResources().getDimensionPixelOffset(R.dimen.photo_height);
+            int wscale = width / realWidth;
+            int hscale = height / realHeight;
+            int scale = (wscale < hscale)? wscale : hscale;
+            if (scale == 0) {
+                scale = 1;
+            }
+
+            options = new BitmapFactory.Options();
+            options.inSampleSize = scale;
+            Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length, options);
+
+            mAdapter.add(bitmap);
+
+            mHandler.postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    startPreview();
+                }
+            }, 500);
+        }
+    };
+
+    Handler mHandler = new Handler();
+    private void takePicture() {
+        mCamera.takePicture(shutterCallback, rawCallback, jpegCallback);
+    }
+
+    private void changeColorEffect() {
+        Camera.Parameters parameters = mCamera.getParameters();
+        final List<String> effectList = parameters.getSupportedColorEffects();
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("color effect");
+        builder.setItems(effectList.toArray(new String[effectList.size()]), new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                String effect = effectList.get(which);
+                Camera.Parameters params = mCamera.getParameters();
+                params.setColorEffect(effect);
+                mCamera.setParameters(params);
+            }
+        });
+        builder.create().show();
+    }
+    private void changeCamera() {
+        if (Camera.getNumberOfCameras() <= 1) return;
+        stopPreview();
+        releaseCamera();
+        cameraId = (cameraId == Camera.CameraInfo.CAMERA_FACING_BACK)? Camera.CameraInfo.CAMERA_FACING_FRONT : Camera.CameraInfo.CAMERA_FACING_BACK;
+        openCamera();
+        startPreview();
     }
 
     private static final int RC_PERMISSION = 100;
@@ -37,6 +149,8 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
             startPreview();
         }
     }
+
+    int[] orientations = {90, 0, 270, 180};
 
     private void openCamera() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
@@ -66,6 +180,8 @@ public class MainActivity extends AppCompatActivity implements SurfaceHolder.Cal
         } else {
             mCamera = Camera.open(cameraId);
         }
+        int rotation = getWindowManager().getDefaultDisplay().getRotation();
+        mCamera.setDisplayOrientation(orientations[rotation]);
     }
 
     private void releaseCamera() {

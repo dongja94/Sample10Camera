@@ -39,4 +39,11 @@
             android:text="picture"
             android:id="@+id/btn_picture" />
     </LinearLayout>
+
+    <Gallery
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:id="@+id/gallery"
+        android:layout_gravity="left|top"
+        android:spacing="10dp" />
 </FrameLayout>
